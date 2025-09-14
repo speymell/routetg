@@ -210,21 +210,35 @@ app.post('/api/server', authenticateTelegram, (req, res) => {
   const user = req.user;
   const inviteCode = crypto.randomBytes(8).toString('hex');
   
+  console.log(`🏗️ Creating server: ${name} by user ${user.id} (${user.username})`);
+  
   db.run('INSERT INTO servers (name, description, owner_id, invite_code) VALUES (?, ?, ?, ?)', 
     [name, description || '', user.id, inviteCode], 
     function(err) {
-      if (err) return res.status(500).json({ error: err.message });
+      if (err) {
+        console.error('❌ Error creating server:', err.message);
+        return res.status(500).json({ error: err.message });
+      }
       const serverId = this.lastID;
+      console.log(`✅ Server created with ID: ${serverId}`);
       
       // Добавить владельца как участника сервера
       db.run('INSERT INTO server_members (server_id, user_id, role) VALUES (?, ?, ?)', 
         [serverId, user.id, 'owner'], (err) => {
-          if (err) return res.status(500).json({ error: err.message });
+          if (err) {
+            console.error('❌ Error adding server member:', err.message);
+            return res.status(500).json({ error: err.message });
+          }
+          console.log(`✅ Server member added: ${user.id} as owner`);
           
           // Создать общий канал
           db.run('INSERT INTO channels (name, server_id, owner_id, type) VALUES (?, ?, ?, ?)', 
             ['Общий', serverId, user.id, 'voice'], (err) => {
-              if (err) return res.status(500).json({ error: err.message });
+              if (err) {
+                console.error('❌ Error creating channel:', err.message);
+                return res.status(500).json({ error: err.message });
+              }
+              console.log(`✅ Default channel created for server ${serverId}`);
               res.json({ 
                 id: serverId, 
                 name, 
@@ -369,6 +383,8 @@ io.on('connection', (socket) => {
   // Присоединиться к комнате (каналу)
   socket.on('join-channel', (data) => {
     const { channelId, userId, username } = data;
+    console.log(`🔵 User ${username} (${userId}) joining channel ${channelId}`);
+    
     socket.join(channelId);
     
     if (!channelUsers.has(channelId)) {
@@ -377,6 +393,7 @@ io.on('connection', (socket) => {
     channelUsers.get(channelId).add(userId);
     
     // Уведомить других участников
+    console.log(`🔵 Notifying other users in channel ${channelId} about new user ${userId}`);
     socket.to(channelId).emit('user-joined', { 
       userId, 
       username,
@@ -392,10 +409,11 @@ io.on('connection', (socket) => {
         username: connectedUsers.get(id) ? 'User' : 'Unknown' // Временно, будет заменено на реальное имя
       }));
     
+    console.log(`🔵 Sending channel users to ${username}:`, currentUsers);
     socket.emit('channel-users', currentUsers);
     
-    console.log(`User ${username} (${userId}) joined channel ${channelId}`);
-    console.log(`Current users in channel ${channelId}:`, Array.from(channelUsers.get(channelId)));
+    console.log(`🔵 User ${username} (${userId}) joined channel ${channelId}`);
+    console.log(`🔵 Current users in channel ${channelId}:`, Array.from(channelUsers.get(channelId)));
   });
 
   // Покинуть канал
