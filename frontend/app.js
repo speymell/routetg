@@ -8,10 +8,25 @@ let localStream = null;
 let peerConnections = {};
 let isMuted = false;
 
+// Тест API
+async function testAPI() {
+  try {
+    console.log('Testing API connection...');
+    const response = await fetch('/api/test');
+    const data = await response.json();
+    console.log('API test result:', data);
+  } catch (error) {
+    console.error('API test failed:', error);
+  }
+}
+
 // Инициализация
 async function init() {
   try {
     console.log('Initializing app...');
+    
+    // Тестируем API
+    await testAPI();
     
     // Проверяем Telegram WebApp
     if (typeof window !== 'undefined' && window.Telegram && window.Telegram.WebApp) {
@@ -876,6 +891,8 @@ async function createServer() {
   const name = document.getElementById('serverNameInput').value.trim();
   const description = document.getElementById('serverDescriptionInput').value.trim();
   
+  console.log('Creating server with name:', name, 'description:', description);
+  
   if (!name) {
     showError('Введите название сервера');
     return;
@@ -887,28 +904,39 @@ async function createServer() {
       initData = tg.initData;
     }
     
+    console.log('Sending request to create server...');
+    const requestBody = { 
+      initData: initData,
+      name: name,
+      description: description
+    };
+    console.log('Request body:', requestBody);
+    
     const response = await fetch('/api/server', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        initData: initData,
-        name: name,
-        description: description
-      })
+      body: JSON.stringify(requestBody)
     });
     
+    console.log('Response status:', response.status);
+    console.log('Response ok:', response.ok);
+    
     if (!response.ok) {
-      throw new Error('Ошибка создания сервера');
+      const errorText = await response.text();
+      console.error('API Error:', response.status, errorText);
+      throw new Error(`Ошибка создания сервера: ${response.status} - ${errorText}`);
     }
     
     const server = await response.json();
+    console.log('Server created successfully:', server);
+    
     hideCreateServerModal();
     await loadUserServers();
     showSuccess(`Сервер "${server.name}" создан! Код приглашения: ${server.invite_code}`);
     
   } catch (error) {
     console.error('Ошибка создания сервера:', error);
-    showError('Ошибка создания сервера');
+    showError('Ошибка создания сервера: ' + error.message);
   }
 }
 
