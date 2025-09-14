@@ -1,4 +1,4 @@
 // Vercel API endpoint
-const app = require('../../backend/server.js');
+const app = require('./server.js');
 
 module.exports = app;
