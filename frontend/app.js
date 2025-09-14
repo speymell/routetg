@@ -1,5 +1,5 @@
 // Глобальные переменные
-let tg = window.Telegram.WebApp;
+let tg = null;
 let socket = null;
 let currentUser = null;
 let currentServer = null;
@@ -14,7 +14,8 @@ async function init() {
     console.log('Initializing app...');
     
     // Проверяем Telegram WebApp
-    if (typeof tg !== 'undefined' && tg) {
+    if (typeof window !== 'undefined' && window.Telegram && window.Telegram.WebApp) {
+      tg = window.Telegram.WebApp;
       console.log('Telegram WebApp detected');
       tg.ready();
       tg.expand();
@@ -948,5 +949,16 @@ document.addEventListener('DOMContentLoaded', function() {
 // Инициализация при загрузке
 document.addEventListener('DOMContentLoaded', function() {
   console.log('DOM loaded, starting initialization...');
-  setTimeout(init, 100); // Небольшая задержка для полной загрузки
+  
+  // Ждем загрузки всех скриптов
+  const checkScripts = () => {
+    if (typeof window.Telegram !== 'undefined' || 
+        (typeof window.Telegram === 'undefined' && document.readyState === 'complete')) {
+      setTimeout(init, 500); // Задержка для полной загрузки
+    } else {
+      setTimeout(checkScripts, 100);
+    }
+  };
+  
+  checkScripts();
 });

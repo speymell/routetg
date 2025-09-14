@@ -20,6 +20,11 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
 
+// Простая версия без внешних скриптов
+app.get('/simple', (req, res) => {
+  res.sendFile(path.join(__dirname, '../frontend/index-simple.html'));
+});
+
 // Функция для проверки подписи Telegram
 function verifyTelegramWebAppData(initData, botToken) {
   if (!initData || !botToken) return false;
