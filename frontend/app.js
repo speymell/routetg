@@ -58,10 +58,16 @@ function updateUserProfile() {
 // Подключиться к серверу
 async function connectToServer() {
   try {
+    // Получаем initData из Telegram или используем тестовые данные
+    let initData = null;
+    if (tg && tg.initData) {
+      initData = tg.initData;
+    }
+    
     const response = await fetch('/api/profile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ initData: tg.initData })
+      body: JSON.stringify({ initData: initData })
     });
     
     if (!response.ok) {
@@ -72,12 +78,12 @@ async function connectToServer() {
     currentUser = { ...currentUser, ...userData };
     updateUserProfile();
     
-    // Подключиться к Socket.IO
-    socket = io();
-    socket.emit('authenticate', { 
-      userId: currentUser.id, 
-      username: currentUser.username || currentUser.first_name 
-    });
+    // Подключиться к Socket.IO (пока отключено для Vercel)
+    // socket = io();
+    // socket.emit('authenticate', { 
+    //   userId: currentUser.id, 
+    //   username: currentUser.username || currentUser.first_name 
+    // });
     
   } catch (error) {
     console.error('Ошибка подключения:', error);
@@ -88,10 +94,15 @@ async function connectToServer() {
 // Загрузить серверы пользователя
 async function loadUserServers() {
   try {
+    let initData = null;
+    if (tg && tg.initData) {
+      initData = tg.initData;
+    }
+    
     const response = await fetch('/api/servers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ initData: tg.initData })
+      body: JSON.stringify({ initData: initData })
     });
     
     if (!response.ok) {
@@ -153,10 +164,15 @@ async function loadServerChannels(serverId) {
     const container = document.getElementById('channelsContainer');
     container.innerHTML = '<div class="loading"><div class="spinner"></div>Загрузка каналов...</div>';
     
+    let initData = null;
+    if (tg && tg.initData) {
+      initData = tg.initData;
+    }
+    
     const response = await fetch(`/api/server/${serverId}/channels`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ initData: tg.initData })
+      body: JSON.stringify({ initData: initData })
     });
     
     if (!response.ok) {
@@ -222,11 +238,16 @@ async function joinChannel(channelId, channelName) {
   try {
     currentChannel = { id: channelId, name: channelName };
     
+    let initData = null;
+    if (tg && tg.initData) {
+      initData = tg.initData;
+    }
+    
     // Присоединиться к каналу через API
     const response = await fetch(`/api/channel/${channelId}/join`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ initData: tg.initData })
+      body: JSON.stringify({ initData: initData })
     });
     
     if (!response.ok) {
@@ -236,8 +257,8 @@ async function joinChannel(channelId, channelName) {
     // Показать голосовой чат
     showVoiceChat();
     
-    // Начать голосовое соединение
-    await startVoiceConnection(channelId);
+    // Начать голосовое соединение (пока отключено)
+    // await startVoiceConnection(channelId);
     
   } catch (error) {
     console.error('Ошибка присоединения к каналу:', error);
@@ -584,11 +605,16 @@ async function createServer() {
   }
   
   try {
+    let initData = null;
+    if (tg && tg.initData) {
+      initData = tg.initData;
+    }
+    
     const response = await fetch('/api/server', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
-        initData: tg.initData,
+        initData: initData,
         name: name,
         description: description
       })
@@ -619,11 +645,16 @@ async function joinServer() {
   }
   
   try {
+    let initData = null;
+    if (tg && tg.initData) {
+      initData = tg.initData;
+    }
+    
     const response = await fetch('/api/server/join', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
-        initData: tg.initData,
+        initData: initData,
         inviteCode: inviteCode
       })
     });
@@ -653,11 +684,16 @@ async function createChannel() {
   }
   
   try {
+    let initData = null;
+    if (tg && tg.initData) {
+      initData = tg.initData;
+    }
+    
     const response = await fetch(`/api/server/${currentServer.id}/channel`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
-        initData: tg.initData,
+        initData: initData,
         name: name,
         type: 'voice'
       })
@@ -680,11 +716,19 @@ async function createChannel() {
 
 // Утилиты
 function showError(message) {
-  tg.showAlert(message);
+  if (tg && tg.showAlert) {
+    tg.showAlert(message);
+  } else {
+    alert(message);
+  }
 }
 
 function showSuccess(message) {
-  tg.showAlert(message);
+  if (tg && tg.showAlert) {
+    tg.showAlert(message);
+  } else {
+    alert(message);
+  }
 }
 
 // Инициализация при загрузке
