@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RouteTG - Голосовой чат</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="user-profile">
+        <div class="user-avatar" id="userAvatar">U</div>
+        <div class="user-info">
+          <h3 id="userName">Пользователь</h3>
+          <div class="user-status">
+            <div class="status-indicator" id="statusIndicator"></div>
+            <span id="userStatus">Онлайн</span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="servers-section">
+        <div class="section-title">Серверы</div>
+        <div id="serversList"></div>
+        <button class="add-server-btn" onclick="showCreateServerModal()">
+          <i class="fas fa-plus"></i> Создать сервер
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <div class="header">
+        <div class="server-header">
+          <div>
+            <div class="server-title" id="currentServerName">Выберите сервер</div>
+            <div class="server-description" id="currentServerDescription"></div>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button class="btn btn-secondary" onclick="showJoinServerModal()">
+            <i class="fas fa-plus"></i> Присоединиться
+          </button>
+          <button class="btn btn-primary" onclick="showCreateChannelModal()" id="createChannelBtn" style="display: none;">
+            <i class="fas fa-plus"></i> Создать канал
+          </button>
+        </div>
+      </div>
+
+      <div class="channels-section">
+        <div id="channelsContainer">
+          <div class="loading">
+            <div class="spinner"></div>
+            Загрузка каналов...
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Voice Chat -->
+  <div class="voice-chat" id="voiceChat">
+    <div class="voice-header">
+      <div class="voice-info">
+        <h3>Голосовой чат</h3>
+        <div class="voice-channel" id="currentChannelName">Канал</div>
+      </div>
+      <div class="voice-controls">
+        <button class="control-btn mute-btn" id="muteBtn" onclick="toggleMute()">
+          <i class="fas fa-microphone"></i>
+        </button>
+        <button class="control-btn leave-btn" onclick="leaveVoiceChat()">
+          <i class="fas fa-phone-slash"></i>
+        </button>
+      </div>
+    </div>
+    <div class="participants" id="participantsList"></div>
+  </div>
+
+  <!-- Modals -->
+  <div class="modal" id="createServerModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="modal-title">Создать сервер</div>
+        <div class="modal-description">Создайте новый сервер для общения с друзьями</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Название сервера</label>
+        <input type="text" class="form-input" id="serverNameInput" placeholder="Введите название">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Описание (необязательно)</label>
+        <input type="text" class="form-input" id="serverDescriptionInput" placeholder="Введите описание">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-cancel" onclick="hideCreateServerModal()">Отмена</button>
+        <button class="btn btn-primary" onclick="createServer()">Создать</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="joinServerModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="modal-title">Присоединиться к серверу</div>
+        <div class="modal-description">Введите код приглашения для присоединения к серверу</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Код приглашения</label>
+        <input type="text" class="form-input" id="inviteCodeInput" placeholder="Введите код приглашения">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-cancel" onclick="hideJoinServerModal()">Отмена</button>
+        <button class="btn btn-primary" onclick="joinServer()">Присоединиться</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="createChannelModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="modal-title">Создать канал</div>
+        <div class="modal-description">Создайте новый голосовой канал</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Название канала</label>
+        <input type="text" class="form-input" id="channelNameInput" placeholder="Введите название">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-cancel" onclick="hideCreateChannelModal()">Отмена</button>
+        <button class="btn btn-primary" onclick="createChannel()">Создать</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
