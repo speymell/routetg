@@ -384,6 +384,16 @@ body {
   transform: scale(1.1);
 }
 
+.control-btn.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.control-btn.disabled:hover {
+  background: var(--secondary-color);
+  transform: none;
+}
+
 .participants {
   display: flex;
   gap: 8px;
@@ -776,4 +786,21 @@ body {
 
 .add-server-btn:first-of-type {
   margin-top: 8px;
+}
+
+/* Стили для серверов с кодом приглашения */
+.server-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.server-invite-code {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  font-family: monospace;
+  background: var(--background-dark);
+  padding: 2px 4px;
+  border-radius: 3px;
+  display: inline-block;
 }

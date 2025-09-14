@@ -20,6 +20,51 @@ async function testAPI() {
   }
 }
 
+// Функции для работы с localStorage
+function saveServersToLocal(servers) {
+  try {
+    localStorage.setItem('route_servers', JSON.stringify(servers));
+    console.log('Servers saved to localStorage:', servers);
+  } catch (error) {
+    console.error('Error saving servers to localStorage:', error);
+  }
+}
+
+function loadServersFromLocal() {
+  try {
+    const saved = localStorage.getItem('route_servers');
+    if (saved) {
+      const servers = JSON.parse(saved);
+      console.log('Servers loaded from localStorage:', servers);
+      return servers;
+    }
+  } catch (error) {
+    console.error('Error loading servers from localStorage:', error);
+  }
+  return [];
+}
+
+function saveInviteCode(serverId, inviteCode) {
+  try {
+    const saved = JSON.parse(localStorage.getItem('route_invite_codes') || '{}');
+    saved[serverId] = inviteCode;
+    localStorage.setItem('route_invite_codes', JSON.stringify(saved));
+    console.log('Invite code saved:', serverId, inviteCode);
+  } catch (error) {
+    console.error('Error saving invite code:', error);
+  }
+}
+
+function getInviteCode(serverId) {
+  try {
+    const saved = JSON.parse(localStorage.getItem('route_invite_codes') || '{}');
+    return saved[serverId] || null;
+  } catch (error) {
+    console.error('Error loading invite code:', error);
+    return null;
+  }
+}
+
 // Инициализация
 async function init() {
   try {
@@ -254,13 +299,19 @@ async function loadUserServers() {
     }
     
     const servers = await response.json();
-    console.log('Loaded servers:', servers);
+    console.log('Loaded servers from API:', servers);
+    
+    // Сохранить серверы в localStorage
+    saveServersToLocal(servers);
+    
     renderServers(servers);
     
   } catch (error) {
     console.error('Ошибка загрузки серверов:', error);
-    // Показываем пустой список серверов вместо ошибки
-    renderServers([]);
+    // Загрузить серверы из localStorage как fallback
+    const localServers = loadServersFromLocal();
+    console.log('Loading servers from localStorage:', localServers);
+    renderServers(localServers);
   }
 }
 
@@ -288,9 +339,16 @@ function renderServers(servers) {
   servers.forEach(server => {
     const serverElement = document.createElement('div');
     serverElement.className = 'server-item';
+    
+    // Получить код приглашения из localStorage
+    const inviteCode = getInviteCode(server.id);
+    
     serverElement.innerHTML = `
       <div class="server-icon">${server.name[0].toUpperCase()}</div>
-      <div class="server-name">${server.name}</div>
+      <div class="server-info">
+        <div class="server-name">${server.name}</div>
+        ${inviteCode ? `<div class="server-invite-code">Код: ${inviteCode}</div>` : ''}
+      </div>
     `;
     serverElement.onclick = () => selectServer(server);
     container.appendChild(serverElement);
@@ -478,6 +536,9 @@ async function startVoiceConnection(channelId) {
     
     console.log('Microphone access granted');
     
+    // Обновить индикатор микрофона
+    updateMicrophoneIndicator(true);
+    
     // Присоединиться к каналу через Socket.IO
     if (socket) {
       socket.emit('join-channel', {
@@ -488,6 +549,10 @@ async function startVoiceConnection(channelId) {
       
       // Настроить обработчики WebRTC
       setupWebRTCHandlers();
+      
+      // Добавить себя в список участников
+      addParticipant(currentUser.id, localStream);
+      
     } else {
       console.warn('Socket not connected, voice chat will not work');
     }
@@ -495,6 +560,21 @@ async function startVoiceConnection(channelId) {
   } catch (error) {
     console.error('Ошибка доступа к микрофону:', error);
     showError('Не удалось получить доступ к микрофону. Проверьте разрешения браузера.');
+    updateMicrophoneIndicator(false);
+  }
+}
+
+// Обновить индикатор микрофона
+function updateMicrophoneIndicator(isConnected) {
+  const muteBtn = document.getElementById('muteBtn');
+  if (muteBtn) {
+    if (isConnected) {
+      muteBtn.classList.remove('disabled');
+      muteBtn.disabled = false;
+    } else {
+      muteBtn.classList.add('disabled');
+      muteBtn.disabled = true;
+    }
   }
 }
 
@@ -692,7 +772,24 @@ async function addParticipant(userId, stream) {
   audio.volume = 0.8; // Установить громкость
   document.body.appendChild(audio);
   
+  // Обновить счетчик участников
+  updateParticipantsCount();
+  
   console.log(`Added participant: ${username} (${userId})`);
+}
+
+// Обновить счетчик участников
+function updateParticipantsCount() {
+  const participantsList = document.getElementById('participantsList');
+  const count = participantsList ? participantsList.children.length : 0;
+  
+  // Обновить счетчик в канале
+  if (currentChannel) {
+    const countElement = document.getElementById(`participants-${currentChannel.id}`);
+    if (countElement) {
+      countElement.textContent = `${count} участников`;
+    }
+  }
 }
 
 // Получить информацию о пользователе
@@ -727,6 +824,9 @@ function removeParticipant(userId) {
   if (audioElement) {
     audioElement.remove();
   }
+  
+  // Обновить счетчик участников
+  updateParticipantsCount();
 }
 
 // Обновить статус микрофона участника
@@ -929,6 +1029,9 @@ async function createServer() {
     
     const server = await response.json();
     console.log('Server created successfully:', server);
+    
+    // Сохранить код приглашения
+    saveInviteCode(server.id, server.invite_code);
     
     hideCreateServerModal();
     await loadUserServers();
