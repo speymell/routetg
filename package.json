@@ -1,5 +1,5 @@
 {
-  "name": "routetg",
+  "name": "route",
   "version": "1.0.0",
   "description": "Voice chat app for Telegram with Discord-like interface",
   "main": "backend/server.js",

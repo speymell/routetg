@@ -31,7 +31,9 @@ async function init() {
       
       if (initData && initData.user) {
         currentUser = initData.user;
-        console.log('Telegram user data:', currentUser);
+        console.log('Telegram user data loaded:', currentUser);
+        console.log('Username from Telegram:', currentUser.username);
+        console.log('First name from Telegram:', currentUser.first_name);
       } else {
         // Для тестирования
         currentUser = { 
@@ -67,10 +69,10 @@ async function init() {
     const container = document.getElementById('channelsContainer');
     if (container) {
       container.innerHTML = `
-        <div style="text-align: center; padding: 40px; color: var(--text-muted);">
-          <i class="fas fa-microphone-slash" style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;"></i>
-          <h3>Добро пожаловать в RouteTG!</h3>
-          <p>Создайте сервер или присоединитесь к существующему для начала общения</p>
+        <div style="text-align: center; padding: 20px; color: var(--text-muted);">
+          <i class="fas fa-microphone-slash" style="font-size: 32px; margin-bottom: 8px; opacity: 0.5;"></i>
+          <h3>Добро пожаловать в Route!</h3>
+          <p style="font-size: 14px; margin-top: 4px;">Создайте сервер или присоединитесь к существующему</p>
         </div>
       `;
     }
@@ -138,6 +140,7 @@ function updateUserProfile() {
                      `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() ||
                      'Пользователь';
   console.log('Setting display name:', displayName);
+  console.log('Current user data in updateUserProfile:', currentUser);
   name.textContent = displayName;
   status.textContent = 'Онлайн';
   
@@ -166,7 +169,21 @@ async function connectToServer() {
     }
     
     const userData = await response.json();
-    currentUser = { ...currentUser, ...userData };
+    console.log('User data from API:', userData);
+    console.log('Current user before merge:', currentUser);
+    
+    // Обновляем только недостающие поля, сохраняя оригинальные данные Telegram
+    currentUser = { 
+      ...currentUser, 
+      ...userData,
+      // Сохраняем оригинальные данные Telegram если они есть
+      username: currentUser.username || userData.username,
+      first_name: currentUser.first_name || userData.first_name,
+      last_name: currentUser.last_name || userData.last_name,
+      photo_url: currentUser.photo_url || userData.avatar
+    };
+    
+    console.log('Current user after merge:', currentUser);
     updateUserProfile();
     
     console.log('Successfully connected to server');
@@ -185,16 +202,18 @@ async function connectToServer() {
     
   } catch (error) {
     console.error('Ошибка подключения:', error);
-    // Не показываем ошибку пользователю, используем тестовые данные
-    console.log('Using fallback user data');
-    currentUser = { 
-      id: 123, 
-      username: 'TestUser', 
-      first_name: 'Test', 
-      last_name: 'User',
-      photo_url: ''
-    };
-    updateUserProfile();
+    // Не показываем ошибку пользователю, используем тестовые данные только если нет данных пользователя
+    if (!currentUser || !currentUser.id) {
+      console.log('Using fallback user data');
+      currentUser = { 
+        id: 123, 
+        username: 'TestUser', 
+        first_name: 'Test', 
+        last_name: 'User',
+        photo_url: ''
+      };
+      updateUserProfile();
+    }
   }
 }
 
@@ -333,10 +352,10 @@ async function loadServerChannels(serverId) {
     const container = document.getElementById('channelsContainer');
     if (container) {
       container.innerHTML = `
-        <div style="text-align: center; padding: 40px; color: var(--text-muted);">
-          <i class="fas fa-exclamation-triangle" style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;"></i>
+        <div style="text-align: center; padding: 20px; color: var(--text-muted);">
+          <i class="fas fa-exclamation-triangle" style="font-size: 32px; margin-bottom: 8px; opacity: 0.5;"></i>
           <h3>Ошибка загрузки каналов</h3>
-          <p>${error.message}</p>
+          <p style="font-size: 14px; margin-top: 4px;">${error.message}</p>
         </div>
       `;
     }
@@ -349,11 +368,11 @@ function renderChannels(channels) {
   
   if (channels.length === 0) {
     container.innerHTML = `
-      <div style="text-align: center; padding: 40px; color: var(--text-muted);">
-        <i class="fas fa-microphone-slash" style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;"></i>
-        <h3>Нет голосовых каналов</h3>
-        <p>Создайте первый канал для начала общения</p>
-      </div>
+        <div style="text-align: center; padding: 20px; color: var(--text-muted);">
+          <i class="fas fa-microphone-slash" style="font-size: 32px; margin-bottom: 8px; opacity: 0.5;"></i>
+          <h3>Нет голосовых каналов</h3>
+          <p style="font-size: 14px; margin-top: 4px;">Создайте первый канал для начала общения</p>
+        </div>
     `;
     return;
   }
