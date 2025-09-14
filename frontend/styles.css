@@ -702,3 +702,78 @@ body {
     font-size: 10px;
   }
 }
+
+/* Улучшенные стили для участников голосового чата */
+.participant {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  transition: background-color 0.2s;
+}
+
+.participant:hover {
+  background-color: var(--hover-color);
+}
+
+.participant-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 16px;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.participant-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.participant-name {
+  display: block;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.participant-status {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.participant-status i {
+  margin-right: 4px;
+  font-size: 10px;
+}
+
+.participant.muted .participant-status {
+  color: var(--danger-color);
+}
+
+.participant.muted .participant-avatar {
+  background: var(--secondary-color);
+}
+
+/* Улучшенные кнопки в боковой панели */
+.add-server-btn {
+  width: 100%;
+  margin: 4px 0;
+  padding: 8px 12px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.add-server-btn:first-of-type {
+  margin-top: 8px;
+}

@@ -27,6 +27,9 @@
       <div class="servers-section">
         <div class="section-title">Серверы</div>
         <div id="serversList"></div>
+        <button class="add-server-btn" onclick="showJoinServerModal()">
+          <i class="fas fa-plus"></i> Присоединиться
+        </button>
         <button class="add-server-btn" onclick="showCreateServerModal()">
           <i class="fas fa-plus"></i> Создать сервер
         </button>
@@ -43,9 +46,6 @@
           </div>
         </div>
         <div class="header-actions">
-          <button class="btn btn-secondary" onclick="showJoinServerModal()">
-            <i class="fas fa-plus"></i> Присоединиться
-          </button>
           <button class="btn btn-primary" onclick="showCreateChannelModal()" id="createChannelBtn" style="display: none;">
             <i class="fas fa-plus"></i> Создать канал
           </button>

@@ -171,12 +171,17 @@ async function connectToServer() {
     
     console.log('Successfully connected to server');
     
-    // Подключиться к Socket.IO (пока отключено для Vercel)
-    // socket = io();
-    // socket.emit('authenticate', { 
-    //   userId: currentUser.id, 
-    //   username: currentUser.username || currentUser.first_name 
-    // });
+    // Подключиться к Socket.IO
+    try {
+      socket = io();
+      socket.emit('authenticate', { 
+        userId: currentUser.id, 
+        username: currentUser.username || currentUser.first_name 
+      });
+      console.log('Socket.IO connected');
+    } catch (error) {
+      console.warn('Socket.IO connection failed:', error);
+    }
     
   } catch (error) {
     console.error('Ошибка подключения:', error);
@@ -407,8 +412,8 @@ async function joinChannel(channelId, channelName) {
     // Показать голосовой чат
     showVoiceChat();
     
-    // Начать голосовое соединение (пока отключено)
-    // await startVoiceConnection(channelId);
+    // Начать голосовое соединение
+    await startVoiceConnection(channelId);
     
   } catch (error) {
     console.error('Ошибка присоединения к каналу:', error);
@@ -437,19 +442,25 @@ async function startVoiceConnection(channelId) {
       } 
     });
     
-    // Присоединиться к каналу через Socket.IO
-    socket.emit('join-channel', {
-      channelId: channelId,
-      userId: currentUser.id,
-      username: currentUser.username || currentUser.first_name
-    });
+    console.log('Microphone access granted');
     
-    // Настроить обработчики WebRTC
-    setupWebRTCHandlers();
+    // Присоединиться к каналу через Socket.IO
+    if (socket) {
+      socket.emit('join-channel', {
+        channelId: channelId,
+        userId: currentUser.id,
+        username: currentUser.username || currentUser.first_name
+      });
+      
+      // Настроить обработчики WebRTC
+      setupWebRTCHandlers();
+    } else {
+      console.warn('Socket not connected, voice chat will not work');
+    }
     
   } catch (error) {
     console.error('Ошибка доступа к микрофону:', error);
-    showError('Не удалось получить доступ к микрофону');
+    showError('Не удалось получить доступ к микрофону. Проверьте разрешения браузера.');
   }
 }
 
@@ -597,7 +608,7 @@ async function handleIceCandidate(data) {
 }
 
 // Добавить участника
-function addParticipant(userId, stream) {
+async function addParticipant(userId, stream) {
   const participantsList = document.getElementById('participantsList');
   
   // Проверить, не добавлен ли уже участник
@@ -605,12 +616,36 @@ function addParticipant(userId, stream) {
     return;
   }
   
+  // Получить информацию о пользователе
+  let username = 'Пользователь';
+  let userAvatar = '';
+  
+  if (currentUser.id === userId) {
+    username = currentUser.username || currentUser.first_name || 'Вы';
+    userAvatar = currentUser.avatar || '';
+  } else {
+    try {
+      const userInfo = await getUserInfo(userId);
+      username = userInfo.username || userInfo.first_name || `Пользователь ${userId}`;
+      userAvatar = userInfo.avatar || '';
+    } catch (error) {
+      console.warn('Failed to get user info:', error);
+      username = `Пользователь ${userId}`;
+    }
+  }
+  
   const participantElement = document.createElement('div');
   participantElement.className = 'participant';
   participantElement.id = `participant-${userId}`;
   participantElement.innerHTML = `
-    <div class="participant-avatar">${userId.toString()[0]}</div>
-    <span>Пользователь ${userId}</span>
+    <div class="participant-avatar" style="${userAvatar ? `background-image: url(${userAvatar}); background-size: cover; background-position: center;` : ''}">${userAvatar ? '' : username[0].toUpperCase()}</div>
+    <div class="participant-info">
+      <span class="participant-name">${username}</span>
+      <div class="participant-status">
+        <i class="fas fa-microphone"></i>
+        <span>Говорит</span>
+      </div>
+    </div>
   `;
   
   participantsList.appendChild(participantElement);
@@ -620,7 +655,30 @@ function addParticipant(userId, stream) {
   audio.srcObject = stream;
   audio.autoplay = true;
   audio.id = `audio-${userId}`;
+  audio.volume = 0.8; // Установить громкость
   document.body.appendChild(audio);
+  
+  console.log(`Added participant: ${username} (${userId})`);
+}
+
+// Получить информацию о пользователе
+async function getUserInfo(userId) {
+  let initData = null;
+  if (tg && tg.initData) {
+    initData = tg.initData;
+  }
+  
+  const response = await fetch(`/api/user/${userId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ initData: initData })
+  });
+  
+  if (!response.ok) {
+    throw new Error('Failed to get user info');
+  }
+  
+  return await response.json();
 }
 
 // Удалить участника
@@ -641,10 +699,21 @@ function removeParticipant(userId) {
 function updateParticipantMute(userId, isMuted) {
   const participantElement = document.getElementById(`participant-${userId}`);
   if (participantElement) {
-    if (isMuted) {
-      participantElement.classList.add('muted');
-    } else {
-      participantElement.classList.remove('muted');
+    const statusElement = participantElement.querySelector('.participant-status');
+    if (statusElement) {
+      if (isMuted) {
+        participantElement.classList.add('muted');
+        statusElement.innerHTML = `
+          <i class="fas fa-microphone-slash"></i>
+          <span>Заглушен</span>
+        `;
+      } else {
+        participantElement.classList.remove('muted');
+        statusElement.innerHTML = `
+          <i class="fas fa-microphone"></i>
+          <span>Говорит</span>
+        `;
+      }
     }
   }
 }
@@ -673,7 +742,7 @@ function toggleMute() {
   }
   
   // Уведомить других участников
-  if (currentChannel) {
+  if (currentChannel && socket) {
     socket.emit('mute-toggle', {
       channelId: currentChannel.id,
       isMuted: isMuted
@@ -705,10 +774,15 @@ function leaveVoiceChat() {
   }
   
   // Очистить участников
-  document.getElementById('participantsList').innerHTML = '';
+  const participantsList = document.getElementById('participantsList');
+  if (participantsList) {
+    participantsList.innerHTML = '';
+  }
   
   currentChannel = null;
   isMuted = false;
+  
+  console.log('Left voice chat');
 }
 
 // Модальные окна

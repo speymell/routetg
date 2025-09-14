@@ -3,8 +3,20 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const crypto = require('crypto');
+const { Server } = require('socket.io');
+const { createServer } = require('http');
 
 const app = express();
+const server = createServer(app);
+
+// Настройка Socket.IO для Vercel
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  },
+  transports: ['websocket', 'polling']
+});
 
 app.use(helmet());
 app.use(cors());
@@ -348,6 +360,65 @@ app.post('/api/channel/:channelId/join', authenticateTelegram, (req, res) => {
   res.json({ success: true, channel });
 });
 
+// API: Получить участников канала
+app.post('/api/channel/:channelId/members', authenticateTelegram, (req, res) => {
+  const { channelId } = req.params;
+  const user = req.user;
+  
+  const channel = channels.get(parseInt(channelId));
+  if (!channel) {
+    return res.status(404).json({ error: 'Channel not found' });
+  }
+  
+  // Проверить доступ к каналу
+  const membership = serverMembers.get(`${channel.server_id}-${user.id}`);
+  if (!membership) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  
+  // Получить участников канала
+  const members = [];
+  for (const [key, member] of channelMembers.entries()) {
+    if (member.channel_id == channelId) {
+      const userData = users.get(member.user_id);
+      if (userData) {
+        members.push({
+          id: userData.id,
+          username: userData.username,
+          first_name: userData.first_name,
+          last_name: userData.last_name,
+          avatar: userData.avatar,
+          status: userData.status,
+          joined_at: member.joined_at
+        });
+      }
+    }
+  }
+  
+  res.json(members);
+});
+
+// API: Получить информацию о пользователе
+app.post('/api/user/:userId', authenticateTelegram, (req, res) => {
+  const { userId } = req.params;
+  const user = req.user;
+  
+  const userData = users.get(parseInt(userId));
+  if (!userData) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  
+  // Возвращаем только публичную информацию
+  res.json({
+    id: userData.id,
+    username: userData.username,
+    first_name: userData.first_name,
+    last_name: userData.last_name,
+    avatar: userData.avatar,
+    status: userData.status
+  });
+});
+
 // Статические файлы
 app.use(express.static('frontend'));
 
@@ -356,4 +427,127 @@ app.get('/', (req, res) => {
   res.sendFile(__dirname + '/../frontend/index.html');
 });
 
-module.exports = app;
+// Socket.IO обработчики для голосового чата
+const connectedUsers = new Map(); // userId -> socketId
+const channelUsers = new Map(); // channelId -> Set of userIds
+
+io.on('connection', (socket) => {
+  console.log('User connected:', socket.id);
+
+  // Аутентификация пользователя
+  socket.on('authenticate', (data) => {
+    const { userId, username } = data;
+    connectedUsers.set(userId, socket.id);
+    socket.userId = userId;
+    socket.username = username;
+    console.log(`User ${username} (${userId}) authenticated`);
+  });
+
+  // Присоединиться к комнате (каналу)
+  socket.on('join-channel', (data) => {
+    const { channelId, userId, username } = data;
+    socket.join(channelId);
+    
+    if (!channelUsers.has(channelId)) {
+      channelUsers.set(channelId, new Set());
+    }
+    channelUsers.get(channelId).add(userId);
+    
+    // Уведомить других участников
+    socket.to(channelId).emit('user-joined', { 
+      userId, 
+      username,
+      socketId: socket.id 
+    });
+    
+    // Отправить список текущих участников новому пользователю
+    const currentUsers = Array.from(channelUsers.get(channelId))
+      .filter(id => id !== userId)
+      .map(id => ({ userId: id, socketId: connectedUsers.get(id) }));
+    
+    socket.emit('channel-users', currentUsers);
+    
+    console.log(`User ${username} joined channel ${channelId}`);
+  });
+
+  // Покинуть канал
+  socket.on('leave-channel', (data) => {
+    const { channelId, userId } = data;
+    socket.leave(channelId);
+    
+    if (channelUsers.has(channelId)) {
+      channelUsers.get(channelId).delete(userId);
+    }
+    
+    socket.to(channelId).emit('user-left', { userId, socketId: socket.id });
+    console.log(`User ${userId} left channel ${channelId}`);
+  });
+
+  // WebRTC signaling
+  socket.on('offer', (data) => {
+    const { target, offer, from } = data;
+    const targetSocket = connectedUsers.get(target);
+    if (targetSocket) {
+      io.to(targetSocket).emit('offer', { 
+        offer, 
+        from: socket.userId,
+        fromSocket: socket.id 
+      });
+    }
+  });
+
+  socket.on('answer', (data) => {
+    const { target, answer, from } = data;
+    const targetSocket = connectedUsers.get(target);
+    if (targetSocket) {
+      io.to(targetSocket).emit('answer', { 
+        answer, 
+        from: socket.userId,
+        fromSocket: socket.id 
+      });
+    }
+  });
+
+  socket.on('ice-candidate', (data) => {
+    const { target, candidate, from } = data;
+    const targetSocket = connectedUsers.get(target);
+    if (targetSocket) {
+      io.to(targetSocket).emit('ice-candidate', { 
+        candidate, 
+        from: socket.userId,
+        fromSocket: socket.id 
+      });
+    }
+  });
+
+  // Управление микрофоном
+  socket.on('mute-toggle', (data) => {
+    const { channelId, isMuted } = data;
+    socket.to(channelId).emit('user-mute-changed', {
+      userId: socket.userId,
+      isMuted
+    });
+  });
+
+  socket.on('disconnect', () => {
+    const userId = socket.userId;
+    if (userId) {
+      connectedUsers.delete(userId);
+      
+      // Удалить из всех каналов
+      for (const [channelId, users] of channelUsers.entries()) {
+        if (users.has(userId)) {
+          users.delete(userId);
+          socket.to(channelId).emit('user-left', { 
+            userId, 
+            socketId: socket.id 
+          });
+        }
+      }
+    }
+    console.log('User disconnected:', socket.id);
+  });
+});
+
+// Для Vercel нужно экспортировать и app и server
+module.exports = { app, server };
