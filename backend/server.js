@@ -302,6 +302,19 @@ app.post('/api/channel/:channelId/members', authenticateTelegram, (req, res) => 
   });
 });
 
+// API: Получить информацию о пользователе по ID
+app.post('/api/user/:userId', authenticateTelegram, (req, res) => {
+  const { userId } = req.params;
+  const user = req.user;
+  
+  db.get('SELECT id, username, first_name, last_name, avatar, status FROM users WHERE id = ?', 
+    [userId], (err, userData) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!userData) return res.status(404).json({ error: 'User not found' });
+      res.json(userData);
+    });
+});
+
 // Статические файлы
 app.use(express.static(path.join(__dirname, '../frontend')));
 
@@ -341,11 +354,16 @@ io.on('connection', (socket) => {
     // Отправить список текущих участников новому пользователю
     const currentUsers = Array.from(channelUsers.get(channelId))
       .filter(id => id !== userId)
-      .map(id => ({ userId: id, socketId: connectedUsers.get(id) }));
+      .map(id => ({ 
+        userId: id, 
+        socketId: connectedUsers.get(id),
+        username: connectedUsers.get(id) ? 'User' : 'Unknown' // Временно, будет заменено на реальное имя
+      }));
     
     socket.emit('channel-users', currentUsers);
     
-    console.log(`User ${username} joined channel ${channelId}`);
+    console.log(`User ${username} (${userId}) joined channel ${channelId}`);
+    console.log(`Current users in channel ${channelId}:`, Array.from(channelUsers.get(channelId)));
   });
 
   // Покинуть канал
