@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
-const sqlite3 = require('sqlite3').verbose();
+const { Pool } = require('pg');
 const cors = require('cors');
 const helmet = require('helmet');
 const crypto = require('crypto');
@@ -16,59 +16,96 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
-// База данных SQLite
-const db = new sqlite3.Database('app.db'); // Файловая база данных
-db.serialize(() => {
-  db.run(`CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY, 
-    username TEXT, 
-    first_name TEXT,
-    last_name TEXT,
-    avatar TEXT, 
-    status TEXT DEFAULT 'online',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
-  
-  db.run(`CREATE TABLE IF NOT EXISTS servers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, 
-    name TEXT, 
-    description TEXT,
-    owner_id INTEGER,
-    invite_code TEXT UNIQUE,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (owner_id) REFERENCES users (id)
-  )`);
-  
-  db.run(`CREATE TABLE IF NOT EXISTS server_members (
-    server_id INTEGER,
-    user_id INTEGER,
-    role TEXT DEFAULT 'member',
-    joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (server_id, user_id),
-    FOREIGN KEY (server_id) REFERENCES servers (id),
-    FOREIGN KEY (user_id) REFERENCES users (id)
-  )`);
-  
-  db.run(`CREATE TABLE IF NOT EXISTS channels (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, 
-    server_id INTEGER, 
-    name TEXT, 
-    type TEXT DEFAULT 'voice',
-    owner_id INTEGER,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (server_id) REFERENCES servers (id),
-    FOREIGN KEY (owner_id) REFERENCES users (id)
-  )`);
-  
-  db.run(`CREATE TABLE IF NOT EXISTS channel_members (
-    channel_id INTEGER, 
-    user_id INTEGER,
-    joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (channel_id, user_id),
-    FOREIGN KEY (channel_id) REFERENCES channels (id),
-    FOREIGN KEY (user_id) REFERENCES users (id)
-  )`);
+// PostgreSQL подключение
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
+
+// Проверка подключения к базе данных
+pool.on('connect', () => {
+  console.log('✅ Connected to PostgreSQL database');
+});
+
+pool.on('error', (err) => {
+  console.error('❌ PostgreSQL connection error:', err);
+});
+
+// Инициализация таблиц
+async function initDatabase() {
+  try {
+    console.log('🏗️ Initializing database tables...');
+    
+    // Создание таблицы пользователей
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id BIGINT PRIMARY KEY, 
+        username TEXT, 
+        first_name TEXT,
+        last_name TEXT,
+        avatar TEXT, 
+        status TEXT DEFAULT 'online',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    // Создание таблицы серверов
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS servers (
+        id SERIAL PRIMARY KEY, 
+        name TEXT NOT NULL, 
+        description TEXT,
+        owner_id BIGINT NOT NULL,
+        invite_code TEXT UNIQUE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (owner_id) REFERENCES users (id)
+      )
+    `);
+    
+    // Создание таблицы участников серверов
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS server_members (
+        server_id INTEGER,
+        user_id BIGINT,
+        role TEXT DEFAULT 'member',
+        joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (server_id, user_id),
+        FOREIGN KEY (server_id) REFERENCES servers (id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+      )
+    `);
+    
+    // Создание таблицы каналов
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS channels (
+        id SERIAL PRIMARY KEY, 
+        server_id INTEGER NOT NULL, 
+        name TEXT NOT NULL, 
+        type TEXT DEFAULT 'voice',
+        owner_id BIGINT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (server_id) REFERENCES servers (id) ON DELETE CASCADE,
+        FOREIGN KEY (owner_id) REFERENCES users (id) ON DELETE CASCADE
+      )
+    `);
+    
+    // Создание таблицы участников каналов
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS channel_members (
+        channel_id INTEGER, 
+        user_id BIGINT,
+        joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (channel_id, user_id),
+        FOREIGN KEY (channel_id) REFERENCES channels (id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+      )
+    `);
+    
+    console.log('✅ Database tables initialized successfully');
+  } catch (error) {
+    console.error('❌ Error initializing database:', error);
+  }
+}
 
 // Функция для проверки подписи Telegram
 function verifyTelegramWebAppData(initData, botToken) {
@@ -142,223 +179,277 @@ function authenticateTelegram(req, res, next) {
 }
 
 // API: Получить/создать профиль пользователя
-app.post('/api/profile', authenticateTelegram, (req, res) => {
-  const user = req.user;
-  db.get('SELECT * FROM users WHERE id = ?', [user.id], (err, row) => {
-    if (!row) {
+app.post('/api/profile', authenticateTelegram, async (req, res) => {
+  try {
+    const user = req.user;
+    const result = await pool.query('SELECT * FROM users WHERE id = $1', [user.id]);
+    
+    if (result.rows.length === 0) {
       // Создать нового пользователя
-      db.run('INSERT INTO users (id, username, first_name, last_name, avatar) VALUES (?, ?, ?, ?, ?)', 
-        [user.id, user.username || '', user.first_name || '', user.last_name || '', user.photo_url || ''], 
-        function(err) {
-          if (err) return res.status(500).json({ error: err.message });
-          res.json({ 
-            id: user.id, 
-            username: user.username || `${user.first_name} ${user.last_name}`.trim(),
-            first_name: user.first_name,
-            last_name: user.last_name,
-            avatar: user.photo_url || '',
-            status: 'online'
-          });
-        });
+      await pool.query(
+        'INSERT INTO users (id, username, first_name, last_name, avatar) VALUES ($1, $2, $3, $4, $5)', 
+        [user.id, user.username || '', user.first_name || '', user.last_name || '', user.photo_url || '']
+      );
+      res.json({ 
+        id: user.id, 
+        username: user.username || `${user.first_name} ${user.last_name}`.trim(),
+        first_name: user.first_name,
+        last_name: user.last_name,
+        avatar: user.photo_url || '',
+        status: 'online'
+      });
     } else {
       // Обновить данные существующего пользователя
-      db.run('UPDATE users SET username = ?, first_name = ?, last_name = ?, avatar = ? WHERE id = ?',
-        [user.username || row.username, user.first_name || row.first_name, user.last_name || row.last_name, user.photo_url || row.avatar, user.id],
-        function(err) {
-          if (err) return res.status(500).json({ error: err.message });
-          res.json({ 
-            id: user.id, 
-            username: user.username || row.username,
-            first_name: user.first_name || row.first_name,
-            last_name: user.last_name || row.last_name,
-            avatar: user.photo_url || row.avatar,
-            status: row.status
-          });
-        });
+      await pool.query(
+        'UPDATE users SET username = $1, first_name = $2, last_name = $3, avatar = $4 WHERE id = $5',
+        [user.username || result.rows[0].username, user.first_name || result.rows[0].first_name, user.last_name || result.rows[0].last_name, user.photo_url || result.rows[0].avatar, user.id]
+      );
+      res.json({ 
+        id: user.id, 
+        username: user.username || result.rows[0].username,
+        first_name: user.first_name || result.rows[0].first_name,
+        last_name: user.last_name || result.rows[0].last_name,
+        avatar: user.photo_url || result.rows[0].avatar,
+        status: result.rows[0].status
+      });
     }
-  });
-});
-
-// API: Обновить статус пользователя
-app.post('/api/profile/status', authenticateTelegram, (req, res) => {
-  const { status } = req.body;
-  const user = req.user;
-  db.run('UPDATE users SET status = ? WHERE id = ?', [status, user.id], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ success: true, status });
-  });
+  } catch (error) {
+    console.error('Error in /api/profile:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // API: Получить серверы пользователя
-app.post('/api/servers', authenticateTelegram, (req, res) => {
-  const user = req.user;
-  db.all(`
-    SELECT s.*, sm.role 
-    FROM servers s 
-    JOIN server_members sm ON s.id = sm.server_id 
-    WHERE sm.user_id = ? 
-    ORDER BY s.created_at DESC
-  `, [user.id], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
-  });
+app.post('/api/servers', authenticateTelegram, async (req, res) => {
+  try {
+    const user = req.user;
+    const result = await pool.query(`
+      SELECT s.*, sm.role 
+      FROM servers s 
+      JOIN server_members sm ON s.id = sm.server_id 
+      WHERE sm.user_id = $1 
+      ORDER BY s.created_at DESC
+    `, [user.id]);
+    
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error in /api/servers:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // API: Создать сервер
-app.post('/api/server', authenticateTelegram, (req, res) => {
-  const { name, description } = req.body;
-  const user = req.user;
-  const inviteCode = crypto.randomBytes(8).toString('hex');
-  
-  console.log(`🏗️ Creating server: ${name} by user ${user.id} (${user.username})`);
-  
-  db.run('INSERT INTO servers (name, description, owner_id, invite_code) VALUES (?, ?, ?, ?)', 
-    [name, description || '', user.id, inviteCode], 
-    function(err) {
-      if (err) {
-        console.error('❌ Error creating server:', err.message);
-        return res.status(500).json({ error: err.message });
-      }
-      const serverId = this.lastID;
+app.post('/api/server', authenticateTelegram, async (req, res) => {
+  try {
+    const { name, description } = req.body;
+    const user = req.user;
+    const inviteCode = crypto.randomBytes(8).toString('hex');
+    
+    console.log(`🏗️ Creating server: ${name} by user ${user.id} (${user.username})`);
+    
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      // Создать сервер
+      const serverResult = await client.query(
+        'INSERT INTO servers (name, description, owner_id, invite_code) VALUES ($1, $2, $3, $4) RETURNING id', 
+        [name, description || '', user.id, inviteCode]
+      );
+      const serverId = serverResult.rows[0].id;
       console.log(`✅ Server created with ID: ${serverId}`);
       
       // Добавить владельца как участника сервера
-      db.run('INSERT INTO server_members (server_id, user_id, role) VALUES (?, ?, ?)', 
-        [serverId, user.id, 'owner'], (err) => {
-          if (err) {
-            console.error('❌ Error adding server member:', err.message);
-            return res.status(500).json({ error: err.message });
-          }
-          console.log(`✅ Server member added: ${user.id} as owner`);
-          
-          // Создать общий канал
-          db.run('INSERT INTO channels (name, server_id, owner_id, type) VALUES (?, ?, ?, ?)', 
-            ['Общий', serverId, user.id, 'voice'], (err) => {
-              if (err) {
-                console.error('❌ Error creating channel:', err.message);
-                return res.status(500).json({ error: err.message });
-              }
-              console.log(`✅ Default channel created for server ${serverId}`);
-              res.json({ 
-                id: serverId, 
-                name, 
-                description: description || '',
-                invite_code: inviteCode,
-                role: 'owner'
-              });
-            });
-        });
-    });
+      await client.query(
+        'INSERT INTO server_members (server_id, user_id, role) VALUES ($1, $2, $3)', 
+        [serverId, user.id, 'owner']
+      );
+      console.log(`✅ Server member added: ${user.id} as owner`);
+      
+      // Создать общий канал
+      await client.query(
+        'INSERT INTO channels (name, server_id, owner_id, type) VALUES ($1, $2, $3, $4)', 
+        ['Общий', serverId, user.id, 'voice']
+      );
+      console.log(`✅ Default channel created for server ${serverId}`);
+      
+      await client.query('COMMIT');
+      
+      res.json({ 
+        id: serverId, 
+        name, 
+        description: description || '',
+        invite_code: inviteCode,
+        role: 'owner'
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('Error in /api/server:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // API: Присоединиться к серверу по invite коду
-app.post('/api/server/join', authenticateTelegram, (req, res) => {
-  const { inviteCode } = req.body;
-  const user = req.user;
-  
-  db.get('SELECT * FROM servers WHERE invite_code = ?', [inviteCode], (err, server) => {
-    if (err || !server) return res.status(404).json({ error: 'Server not found' });
+app.post('/api/server/join', authenticateTelegram, async (req, res) => {
+  try {
+    const { inviteCode } = req.body;
+    const user = req.user;
     
-    db.run('INSERT OR IGNORE INTO server_members (server_id, user_id, role) VALUES (?, ?, ?)', 
-      [server.id, user.id, 'member'], function(err) {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ success: true, server });
-      });
-  });
+    const result = await pool.query('SELECT * FROM servers WHERE invite_code = $1', [inviteCode]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Server not found' });
+    }
+    
+    const server = result.rows[0];
+    await pool.query(
+      'INSERT INTO server_members (server_id, user_id, role) VALUES ($1, $2, $3) ON CONFLICT (server_id, user_id) DO NOTHING', 
+      [server.id, user.id, 'member']
+    );
+    
+    res.json({ success: true, server });
+  } catch (error) {
+    console.error('Error in /api/server/join:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // API: Получить каналы сервера
-app.post('/api/server/:serverId/channels', authenticateTelegram, (req, res) => {
-  const { serverId } = req.params;
-  const user = req.user;
-  
-  // Проверить, что пользователь является участником сервера
-  db.get('SELECT * FROM server_members WHERE server_id = ? AND user_id = ?', 
-    [serverId, user.id], (err, membership) => {
-      if (err || !membership) return res.status(403).json({ error: 'Access denied' });
-      
-      db.all('SELECT * FROM channels WHERE server_id = ? ORDER BY created_at ASC', 
-        [serverId], (err, channels) => {
-          if (err) return res.status(500).json({ error: err.message });
-          res.json(channels);
-        });
-    });
+app.post('/api/server/:serverId/channels', authenticateTelegram, async (req, res) => {
+  try {
+    const { serverId } = req.params;
+    const user = req.user;
+    
+    // Проверить, что пользователь является участником сервера
+    const membershipResult = await pool.query(
+      'SELECT * FROM server_members WHERE server_id = $1 AND user_id = $2', 
+      [serverId, user.id]
+    );
+    
+    if (membershipResult.rows.length === 0) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    
+    const result = await pool.query(
+      'SELECT * FROM channels WHERE server_id = $1 ORDER BY created_at ASC', 
+      [serverId]
+    );
+    
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error in /api/server/:serverId/channels:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // API: Создать канал
-app.post('/api/server/:serverId/channel', authenticateTelegram, (req, res) => {
-  const { serverId } = req.params;
-  const { name, type } = req.body;
-  const user = req.user;
-  
-  // Проверить права (только владелец или админ)
-  db.get('SELECT role FROM server_members WHERE server_id = ? AND user_id = ?', 
-    [serverId, user.id], (err, membership) => {
-      if (err || !membership || !['owner', 'admin'].includes(membership.role)) {
-        return res.status(403).json({ error: 'Insufficient permissions' });
-      }
-      
-      db.run('INSERT INTO channels (name, server_id, owner_id, type) VALUES (?, ?, ?, ?)', 
-        [name, serverId, user.id, type || 'voice'], function(err) {
-          if (err) return res.status(500).json({ error: err.message });
-          res.json({ id: this.lastID, name, type: type || 'voice' });
-        });
-    });
+app.post('/api/server/:serverId/channel', authenticateTelegram, async (req, res) => {
+  try {
+    const { serverId } = req.params;
+    const { name, type } = req.body;
+    const user = req.user;
+    
+    // Проверить права (только владелец или админ)
+    const membershipResult = await pool.query(
+      'SELECT role FROM server_members WHERE server_id = $1 AND user_id = $2', 
+      [serverId, user.id]
+    );
+    
+    if (membershipResult.rows.length === 0 || !['owner', 'admin'].includes(membershipResult.rows[0].role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    
+    const result = await pool.query(
+      'INSERT INTO channels (name, server_id, owner_id, type) VALUES ($1, $2, $3, $4) RETURNING id', 
+      [name, serverId, user.id, type || 'voice']
+    );
+    
+    res.json({ id: result.rows[0].id, name, type: type || 'voice' });
+  } catch (error) {
+    console.error('Error in /api/server/:serverId/channel:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // API: Присоединиться к каналу
-app.post('/api/channel/:channelId/join', authenticateTelegram, (req, res) => {
-  const { channelId } = req.params;
-  const user = req.user;
-  
-  // Проверить, что пользователь имеет доступ к серверу канала
-  db.get(`
-    SELECT c.*, s.id as server_id 
-    FROM channels c 
-    JOIN servers s ON c.server_id = s.id 
-    JOIN server_members sm ON s.id = sm.server_id 
-    WHERE c.id = ? AND sm.user_id = ?
-  `, [channelId, user.id], (err, channel) => {
-    if (err || !channel) return res.status(403).json({ error: 'Access denied' });
+app.post('/api/channel/:channelId/join', authenticateTelegram, async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    const user = req.user;
     
-    db.run('INSERT OR IGNORE INTO channel_members (channel_id, user_id) VALUES (?, ?)', 
-      [channelId, user.id], function(err) {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ success: true, channel });
-      });
-  });
+    // Проверить, что пользователь имеет доступ к серверу канала
+    const result = await pool.query(`
+      SELECT c.*, s.id as server_id 
+      FROM channels c 
+      JOIN servers s ON c.server_id = s.id 
+      JOIN server_members sm ON s.id = sm.server_id 
+      WHERE c.id = $1 AND sm.user_id = $2
+    `, [channelId, user.id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    
+    const channel = result.rows[0];
+    await pool.query(
+      'INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2) ON CONFLICT (channel_id, user_id) DO NOTHING', 
+      [channelId, user.id]
+    );
+    
+    res.json({ success: true, channel });
+  } catch (error) {
+    console.error('Error in /api/channel/:channelId/join:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // API: Получить участников канала
-app.post('/api/channel/:channelId/members', authenticateTelegram, (req, res) => {
-  const { channelId } = req.params;
-  const user = req.user;
-  
-  db.all(`
-    SELECT u.id, u.username, u.first_name, u.last_name, u.avatar, u.status, cm.joined_at
-    FROM channel_members cm
-    JOIN users u ON cm.user_id = u.id
-    JOIN channels c ON cm.channel_id = c.id
-    JOIN server_members sm ON c.server_id = sm.server_id AND u.id = sm.user_id
-    WHERE cm.channel_id = ? AND sm.user_id = ?
-    ORDER BY cm.joined_at ASC
-  `, [channelId, user.id], (err, members) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(members);
-  });
+app.post('/api/channel/:channelId/members', authenticateTelegram, async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    const user = req.user;
+    
+    const result = await pool.query(`
+      SELECT u.id, u.username, u.first_name, u.last_name, u.avatar, u.status, cm.joined_at
+      FROM channel_members cm
+      JOIN users u ON cm.user_id = u.id
+      JOIN channels c ON cm.channel_id = c.id
+      JOIN server_members sm ON c.server_id = sm.server_id AND u.id = sm.user_id
+      WHERE cm.channel_id = $1 AND sm.user_id = $2
+      ORDER BY cm.joined_at ASC
+    `, [channelId, user.id]);
+    
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error in /api/channel/:channelId/members:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // API: Получить информацию о пользователе по ID
-app.post('/api/user/:userId', authenticateTelegram, (req, res) => {
-  const { userId } = req.params;
-  const user = req.user;
-  
-  db.get('SELECT id, username, first_name, last_name, avatar, status FROM users WHERE id = ?', 
-    [userId], (err, userData) => {
-      if (err) return res.status(500).json({ error: err.message });
-      if (!userData) return res.status(404).json({ error: 'User not found' });
-      res.json(userData);
-    });
+app.post('/api/user/:userId', authenticateTelegram, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const user = req.user;
+    
+    const result = await pool.query(
+      'SELECT id, username, first_name, last_name, avatar, status FROM users WHERE id = $1', 
+      [userId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error in /api/user/:userId:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Статические файлы
@@ -406,7 +497,7 @@ io.on('connection', (socket) => {
       .map(id => ({ 
         userId: id, 
         socketId: connectedUsers.get(id),
-        username: connectedUsers.get(id) ? 'User' : 'Unknown' // Временно, будет заменено на реальное имя
+        username: connectedUsers.get(id) ? 'User' : 'Unknown'
       }));
     
     console.log(`🔵 Sending channel users to ${username}:`, currentUsers);
@@ -495,11 +586,26 @@ io.on('connection', (socket) => {
   });
 });
 
-const PORT = process.env.PORT || 3000;
-
-// Для Vercel
-if (process.env.NODE_ENV === 'production') {
-  module.exports = app;
-} else {
-  server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// Инициализация базы данных и запуск сервера
+async function startServer() {
+  try {
+    await initDatabase();
+    
+    const PORT = process.env.PORT || 3000;
+    
+    if (process.env.NODE_ENV === 'production') {
+      module.exports = app;
+    } else {
+      server.listen(PORT, () => {
+        console.log(`🚀 Server running on port ${PORT}`);
+        console.log(`📊 Database: PostgreSQL`);
+        console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
+      });
+    }
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
 }
+
+startServer();
