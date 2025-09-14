@@ -711,6 +711,25 @@ body {
     height: 20px;
     font-size: 10px;
   }
+  
+  /* Адаптивные стили для приветственного сообщения */
+  .welcome-message {
+    padding: 12px;
+  }
+  
+  .welcome-message i {
+    font-size: 24px;
+    margin-bottom: 6px;
+  }
+  
+  .welcome-message h3 {
+    font-size: 16px;
+    margin-bottom: 6px;
+  }
+  
+  .welcome-message p {
+    font-size: 12px;
+  }
 }
 
 /* Улучшенные стили для участников голосового чата */
@@ -786,6 +805,31 @@ body {
 
 .add-server-btn:first-of-type {
   margin-top: 8px;
+}
+
+/* Приветственное сообщение */
+.welcome-message {
+  text-align: center;
+  padding: 20px;
+  color: var(--text-muted);
+}
+
+.welcome-message i {
+  font-size: 32px;
+  margin-bottom: 8px;
+  opacity: 0.5;
+  display: block;
+}
+
+.welcome-message h3 {
+  font-size: 18px;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+
+.welcome-message p {
+  font-size: 14px;
+  margin: 0;
 }
 
 /* Стили для серверов с кодом приглашения */

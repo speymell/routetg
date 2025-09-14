@@ -95,9 +95,10 @@ async function init() {
         console.log('Username from Telegram:', currentUser.username);
         console.log('First name from Telegram:', currentUser.first_name);
       } else {
-        // Для тестирования
+        // Для тестирования - генерируем уникальный ID
+        const testUserId = Math.floor(Math.random() * 10000) + 1000;
         currentUser = { 
-          id: 123, 
+          id: testUserId, 
           username: 'TestUser', 
           first_name: 'Test', 
           last_name: 'User',
@@ -107,9 +108,10 @@ async function init() {
       }
     } else {
       console.log('Telegram WebApp not detected, using test data');
-      // Для тестирования в браузере
+      // Для тестирования в браузере - генерируем уникальный ID
+      const testUserId = Math.floor(Math.random() * 10000) + 1000;
       currentUser = { 
-        id: 123, 
+        id: testUserId, 
         username: 'TestUser', 
         first_name: 'Test', 
         last_name: 'User',
@@ -129,10 +131,10 @@ async function init() {
     const container = document.getElementById('channelsContainer');
     if (container) {
       container.innerHTML = `
-        <div style="text-align: center; padding: 20px; color: var(--text-muted);">
-          <i class="fas fa-microphone-slash" style="font-size: 32px; margin-bottom: 8px; opacity: 0.5;"></i>
+        <div class="welcome-message">
+          <i class="fas fa-microphone-slash"></i>
           <h3>Добро пожаловать в Route!</h3>
-          <p style="font-size: 14px; margin-top: 4px;">Создайте сервер или присоединитесь к существующему</p>
+          <p>Создайте сервер или присоединитесь к существующему</p>
         </div>
       `;
     }
@@ -265,8 +267,9 @@ async function connectToServer() {
     // Не показываем ошибку пользователю, используем тестовые данные только если нет данных пользователя
     if (!currentUser || !currentUser.id) {
       console.log('Using fallback user data');
+      const fallbackUserId = Math.floor(Math.random() * 10000) + 1000;
       currentUser = { 
-        id: 123, 
+        id: fallbackUserId, 
         username: 'TestUser', 
         first_name: 'Test', 
         last_name: 'User',
@@ -525,6 +528,9 @@ function showVoiceChat() {
 // Начать голосовое соединение
 async function startVoiceConnection(channelId) {
   try {
+    console.log('🎤 Starting voice connection for channel:', channelId);
+    console.log('🎤 Current user:', currentUser);
+    
     // Получить доступ к микрофону
     localStream = await navigator.mediaDevices.getUserMedia({ 
       audio: { 
@@ -534,13 +540,19 @@ async function startVoiceConnection(channelId) {
       } 
     });
     
-    console.log('Microphone access granted');
+    console.log('🎤 Microphone access granted');
     
     // Обновить индикатор микрофона
     updateMicrophoneIndicator(true);
     
     // Присоединиться к каналу через Socket.IO
     if (socket) {
+      console.log('🎤 Joining channel via Socket.IO:', {
+        channelId: channelId,
+        userId: currentUser.id,
+        username: currentUser.username || currentUser.first_name
+      });
+      
       socket.emit('join-channel', {
         channelId: channelId,
         userId: currentUser.id,
@@ -551,10 +563,11 @@ async function startVoiceConnection(channelId) {
       setupWebRTCHandlers();
       
       // Добавить себя в список участников
+      console.log('🎤 Adding self to participants list');
       addParticipant(currentUser.id, localStream);
       
     } else {
-      console.warn('Socket not connected, voice chat will not work');
+      console.warn('🎤 Socket not connected, voice chat will not work');
     }
     
   } catch (error) {
@@ -581,10 +594,20 @@ function updateMicrophoneIndicator(isConnected) {
 // Настроить обработчики WebRTC
 function setupWebRTCHandlers() {
   socket.on('user-joined', async (data) => {
-    await createPeerConnection(data.userId, data.socketId, true);
+    console.log('🔵 User joined:', data);
+    console.log('🔵 Current user ID:', currentUser.id);
+    console.log('🔵 Joining user ID:', data.userId);
+    
+    if (data.userId !== currentUser.id) {
+      console.log('🔵 Creating peer connection for user:', data.userId);
+      await createPeerConnection(data.userId, data.socketId, true);
+    } else {
+      console.log('🔵 Ignoring self join event');
+    }
   });
   
   socket.on('user-left', (data) => {
+    console.log('🔴 User left:', data);
     removeParticipant(data.userId);
     if (peerConnections[data.userId]) {
       peerConnections[data.userId].close();
@@ -592,25 +615,38 @@ function setupWebRTCHandlers() {
     }
   });
   
-  socket.on('channel-users', (users) => {
-    users.forEach(user => {
-      createPeerConnection(user.userId, user.socketId, false);
-    });
+  socket.on('channel-users', async (users) => {
+    console.log('👥 Channel users received:', users);
+    console.log('👥 Current user ID:', currentUser.id);
+    
+    for (const user of users) {
+      console.log('👥 Processing user:', user.userId, 'vs current:', currentUser.id);
+      if (user.userId !== currentUser.id) {
+        console.log('👥 Creating peer connection for existing user:', user.userId);
+        await createPeerConnection(user.userId, user.socketId, false);
+      } else {
+        console.log('👥 Skipping self in channel users');
+      }
+    }
   });
   
   socket.on('offer', async (data) => {
+    console.log('📞 Received offer from:', data.from);
     await handleOffer(data);
   });
   
   socket.on('answer', async (data) => {
+    console.log('📞 Received answer from:', data.from);
     await handleAnswer(data);
   });
   
   socket.on('ice-candidate', async (data) => {
+    console.log('🧊 Received ICE candidate from:', data.from);
     await handleIceCandidate(data);
   });
   
   socket.on('user-mute-changed', (data) => {
+    console.log('🔇 User mute changed:', data);
     updateParticipantMute(data.userId, data.isMuted);
   });
 }
@@ -723,10 +759,15 @@ async function handleIceCandidate(data) {
 
 // Добавить участника
 async function addParticipant(userId, stream) {
+  console.log('➕ Adding participant:', userId);
+  console.log('➕ Stream:', stream);
+  console.log('➕ Current user ID:', currentUser.id);
+  
   const participantsList = document.getElementById('participantsList');
   
   // Проверить, не добавлен ли уже участник
   if (document.getElementById(`participant-${userId}`)) {
+    console.log(`➕ Participant ${userId} already exists, skipping`);
     return;
   }
   
@@ -736,7 +777,7 @@ async function addParticipant(userId, stream) {
   
   if (currentUser.id === userId) {
     username = currentUser.username || currentUser.first_name || 'Вы';
-    userAvatar = currentUser.avatar || '';
+    userAvatar = currentUser.avatar || currentUser.photo_url || '';
   } else {
     try {
       const userInfo = await getUserInfo(userId);

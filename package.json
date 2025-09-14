@@ -4,10 +4,10 @@
   "description": "Voice chat app for Telegram with Discord-like interface",
   "main": "backend/server.js",
   "scripts": {
-    "start": "cd backend && npm start",
-    "dev": "cd backend && npm run dev",
-    "build": "cd backend && npm install",
-    "vercel-build": "cd backend && npm install"
+    "start": "node backend/server.js",
+    "dev": "nodemon backend/server.js",
+    "build": "npm install",
+    "vercel-build": "npm install"
   },
   "keywords": [
     "telegram",
@@ -26,7 +26,7 @@
     "dotenv": "^16.3.1",
     "express": "^5.1.0",
     "helmet": "^8.1.0",
-    "socket.io": "^4.8.1",
-    "sqlite3": "^5.1.7"
+    "pg": "^8.11.5",
+    "socket.io": "^4.8.1"
   }
 }
