@@ -1,0 +1,24 @@
+{
+  "name": "routetg",
+  "version": "1.0.0",
+  "description": "Voice chat app for Telegram with Discord-like interface",
+  "main": "backend/server.js",
+  "scripts": {
+    "start": "cd backend && npm start",
+    "dev": "cd backend && npm run dev",
+    "build": "cd backend && npm install",
+    "vercel-build": "cd backend && npm install"
+  },
+  "keywords": [
+    "telegram",
+    "voice-chat",
+    "webrtc",
+    "discord",
+    "nodejs"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

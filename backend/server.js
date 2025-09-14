@@ -6,6 +6,7 @@ const sqlite3 = require('sqlite3').verbose();
 const cors = require('cors');
 const helmet = require('helmet');
 const crypto = require('crypto');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
@@ -302,7 +303,7 @@ app.post('/api/channel/:channelId/members', authenticateTelegram, (req, res) => 
 });
 
 // Статические файлы
-app.use(express.static('../frontend'));
+app.use(express.static(path.join(__dirname, '../frontend')));
 
 // Signaling для WebRTC (голосовой чат)
 const connectedUsers = new Map(); // userId -> socketId
@@ -427,4 +428,10 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+// Для Vercel
+if (process.env.NODE_ENV === 'production') {
+  module.exports = app;
+} else {
+  server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+}
