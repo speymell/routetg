@@ -57,6 +57,18 @@ async function init() {
     // Загрузить серверы пользователя
     await loadUserServers();
     
+    // Показываем начальное сообщение
+    const container = document.getElementById('channelsContainer');
+    if (container) {
+      container.innerHTML = `
+        <div style="text-align: center; padding: 40px; color: var(--text-muted);">
+          <i class="fas fa-microphone-slash" style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;"></i>
+          <h3>Добро пожаловать в RouteTG!</h3>
+          <p>Создайте сервер или присоединитесь к существующему для начала общения</p>
+        </div>
+      `;
+    }
+    
     console.log('App initialized successfully');
     
   } catch (error) {
@@ -67,21 +79,26 @@ async function init() {
 
 // Обновить профиль пользователя
 function updateUserProfile() {
+  console.log('Updating user profile...');
   const avatar = document.getElementById('userAvatar');
   const name = document.getElementById('userName');
   const status = document.getElementById('userStatus');
   
   if (!avatar || !name || !status) {
-    console.error('Profile elements not found');
+    console.error('Profile elements not found:', { avatar, name, status });
     return;
   }
+  
+  console.log('Current user data:', currentUser);
   
   // Очищаем предыдущие стили
   avatar.style.backgroundImage = '';
   avatar.style.backgroundSize = '';
+  avatar.style.backgroundPosition = '';
   
   if (currentUser.avatar || currentUser.photo_url) {
     const photoUrl = currentUser.avatar || currentUser.photo_url;
+    console.log('Setting avatar image:', photoUrl);
     avatar.style.backgroundImage = `url(${photoUrl})`;
     avatar.style.backgroundSize = 'cover';
     avatar.style.backgroundPosition = 'center';
@@ -106,6 +123,7 @@ function updateUserProfile() {
       initials = 'U';
     }
     
+    console.log('Setting initials:', initials);
     avatar.textContent = initials;
   }
   
@@ -113,10 +131,11 @@ function updateUserProfile() {
   const displayName = currentUser.username || 
                      `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() ||
                      'Пользователь';
+  console.log('Setting display name:', displayName);
   name.textContent = displayName;
   status.textContent = 'Онлайн';
   
-  console.log('Profile updated:', currentUser);
+  console.log('Profile updated successfully');
 }
 
 // Подключиться к серверу
@@ -158,6 +177,7 @@ async function connectToServer() {
 // Загрузить серверы пользователя
 async function loadUserServers() {
   try {
+    console.log('Loading user servers...');
     let initData = null;
     if (tg && tg.initData) {
       initData = tg.initData;
@@ -174,11 +194,12 @@ async function loadUserServers() {
     }
     
     const servers = await response.json();
+    console.log('Loaded servers:', servers);
     renderServers(servers);
     
   } catch (error) {
     console.error('Ошибка загрузки серверов:', error);
-    showError('Ошибка загрузки серверов');
+    showError('Ошибка загрузки серверов: ' + error.message);
   }
 }
 
@@ -225,7 +246,13 @@ async function selectServer(server) {
 // Загрузить каналы сервера
 async function loadServerChannels(serverId) {
   try {
+    console.log('Loading channels for server:', serverId);
     const container = document.getElementById('channelsContainer');
+    if (!container) {
+      console.error('channelsContainer not found');
+      return;
+    }
+    
     container.innerHTML = '<div class="loading"><div class="spinner"></div>Загрузка каналов...</div>';
     
     let initData = null;
@@ -244,11 +271,24 @@ async function loadServerChannels(serverId) {
     }
     
     const channels = await response.json();
+    console.log('Loaded channels:', channels);
     renderChannels(channels);
     
   } catch (error) {
     console.error('Ошибка загрузки каналов:', error);
-    showError('Ошибка загрузки каналов');
+    showError('Ошибка загрузки каналов: ' + error.message);
+    
+    // Показываем сообщение об ошибке
+    const container = document.getElementById('channelsContainer');
+    if (container) {
+      container.innerHTML = `
+        <div style="text-align: center; padding: 40px; color: var(--text-muted);">
+          <i class="fas fa-exclamation-triangle" style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;"></i>
+          <h3>Ошибка загрузки каналов</h3>
+          <p>${error.message}</p>
+        </div>
+      `;
+    }
   }
 }
 
@@ -627,35 +667,69 @@ function leaveVoiceChat() {
 
 // Модальные окна
 function showCreateServerModal() {
-  document.getElementById('createServerModal').classList.add('active');
+  console.log('Showing create server modal');
+  const modal = document.getElementById('createServerModal');
+  if (modal) {
+    modal.classList.add('active');
+  } else {
+    console.error('createServerModal not found');
+  }
 }
 
 function hideCreateServerModal() {
-  document.getElementById('createServerModal').classList.remove('active');
-  document.getElementById('serverNameInput').value = '';
-  document.getElementById('serverDescriptionInput').value = '';
+  console.log('Hiding create server modal');
+  const modal = document.getElementById('createServerModal');
+  if (modal) {
+    modal.classList.remove('active');
+  }
+  const nameInput = document.getElementById('serverNameInput');
+  const descInput = document.getElementById('serverDescriptionInput');
+  if (nameInput) nameInput.value = '';
+  if (descInput) descInput.value = '';
 }
 
 function showJoinServerModal() {
-  document.getElementById('joinServerModal').classList.add('active');
+  console.log('Showing join server modal');
+  const modal = document.getElementById('joinServerModal');
+  if (modal) {
+    modal.classList.add('active');
+  } else {
+    console.error('joinServerModal not found');
+  }
 }
 
 function hideJoinServerModal() {
-  document.getElementById('joinServerModal').classList.remove('active');
-  document.getElementById('inviteCodeInput').value = '';
+  console.log('Hiding join server modal');
+  const modal = document.getElementById('joinServerModal');
+  if (modal) {
+    modal.classList.remove('active');
+  }
+  const input = document.getElementById('inviteCodeInput');
+  if (input) input.value = '';
 }
 
 function showCreateChannelModal() {
+  console.log('Showing create channel modal');
   if (!currentServer) {
     showError('Выберите сервер');
     return;
   }
-  document.getElementById('createChannelModal').classList.add('active');
+  const modal = document.getElementById('createChannelModal');
+  if (modal) {
+    modal.classList.add('active');
+  } else {
+    console.error('createChannelModal not found');
+  }
 }
 
 function hideCreateChannelModal() {
-  document.getElementById('createChannelModal').classList.remove('active');
-  document.getElementById('channelNameInput').value = '';
+  console.log('Hiding create channel modal');
+  const modal = document.getElementById('createChannelModal');
+  if (modal) {
+    modal.classList.remove('active');
+  }
+  const input = document.getElementById('channelNameInput');
+  if (input) input.value = '';
 }
 
 // Создать сервер
@@ -872,4 +946,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Инициализация при загрузке
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', function() {
+  console.log('DOM loaded, starting initialization...');
+  setTimeout(init, 100); // Небольшая задержка для полной загрузки
+});
