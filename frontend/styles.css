@@ -527,19 +527,178 @@ body {
 
 /* Responsive */
 @media (max-width: 768px) {
-  .sidebar {
-    width: 200px;
+  .app-container {
+    flex-direction: column;
   }
   
-  .channels-grid {
-    grid-template-columns: 1fr;
+  .sidebar {
+    width: 100%;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+  
+  .user-profile {
+    padding: 12px 16px;
+  }
+  
+  .servers-section {
+    padding: 12px 16px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  
+  .main-content {
+    height: calc(100vh - 200px);
   }
   
   .header {
     padding: 12px 16px;
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  
+  .header-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+  
+  .btn {
+    flex: 1;
+    justify-content: center;
   }
   
   .channels-section {
     padding: 16px;
+  }
+  
+  .channels-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  
+  .channel-card {
+    padding: 16px;
+  }
+  
+  .voice-chat {
+    padding: 12px 16px;
+  }
+  
+  .voice-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  
+  .voice-controls {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .modal-content {
+    width: 95%;
+    margin: 20px;
+    padding: 20px;
+  }
+  
+  .modal-actions {
+    flex-direction: column;
+  }
+  
+  .btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .sidebar {
+    height: 180px;
+  }
+  
+  .servers-section {
+    max-height: 120px;
+  }
+  
+  .main-content {
+    height: calc(100vh - 180px);
+  }
+  
+  .user-profile {
+    padding: 8px 12px;
+  }
+  
+  .user-avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
+  }
+  
+  .user-info h3 {
+    font-size: 12px;
+  }
+  
+  .user-status {
+    font-size: 10px;
+  }
+  
+  .header {
+    padding: 8px 12px;
+  }
+  
+  .server-title {
+    font-size: 14px;
+  }
+  
+  .server-description {
+    font-size: 12px;
+  }
+  
+  .channels-section {
+    padding: 12px;
+  }
+  
+  .channel-card {
+    padding: 12px;
+  }
+  
+  .channel-header {
+    margin-bottom: 8px;
+  }
+  
+  .channel-icon {
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
+  }
+  
+  .channel-info h3 {
+    font-size: 14px;
+  }
+  
+  .channel-type {
+    font-size: 10px;
+  }
+  
+  .voice-chat {
+    padding: 8px 12px;
+  }
+  
+  .control-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 16px;
+  }
+  
+  .participant {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+  
+  .participant-avatar {
+    width: 20px;
+    height: 20px;
+    font-size: 10px;
   }
 }

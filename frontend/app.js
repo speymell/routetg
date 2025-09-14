@@ -11,19 +11,45 @@ let isMuted = false;
 // Инициализация
 async function init() {
   try {
-    tg.ready();
-    tg.expand();
+    console.log('Initializing app...');
     
-    // Получить данные пользователя из Telegram
-    const initData = tg.initDataUnsafe;
-    if (initData.user) {
-      currentUser = initData.user;
-      updateUserProfile();
+    // Проверяем Telegram WebApp
+    if (typeof tg !== 'undefined' && tg) {
+      console.log('Telegram WebApp detected');
+      tg.ready();
+      tg.expand();
+      
+      // Получить данные пользователя из Telegram
+      const initData = tg.initDataUnsafe;
+      console.log('Telegram initData:', initData);
+      
+      if (initData && initData.user) {
+        currentUser = initData.user;
+        console.log('Telegram user data:', currentUser);
+      } else {
+        // Для тестирования
+        currentUser = { 
+          id: 123, 
+          username: 'TestUser', 
+          first_name: 'Test', 
+          last_name: 'User',
+          photo_url: ''
+        };
+        console.log('Using test user data:', currentUser);
+      }
     } else {
-      // Для тестирования
-      currentUser = { id: 123, username: 'TestUser', first_name: 'Test', last_name: 'User' };
-      updateUserProfile();
+      console.log('Telegram WebApp not detected, using test data');
+      // Для тестирования в браузере
+      currentUser = { 
+        id: 123, 
+        username: 'TestUser', 
+        first_name: 'Test', 
+        last_name: 'User',
+        photo_url: ''
+      };
     }
+    
+    updateUserProfile();
 
     // Подключиться к серверу
     await connectToServer();
@@ -31,9 +57,11 @@ async function init() {
     // Загрузить серверы пользователя
     await loadUserServers();
     
+    console.log('App initialized successfully');
+    
   } catch (error) {
     console.error('Ошибка инициализации:', error);
-    showError('Ошибка инициализации приложения');
+    showError('Ошибка инициализации приложения: ' + error.message);
   }
 }
 
@@ -43,16 +71,52 @@ function updateUserProfile() {
   const name = document.getElementById('userName');
   const status = document.getElementById('userStatus');
   
-  if (currentUser.photo_url) {
-    avatar.style.backgroundImage = `url(${currentUser.photo_url})`;
-    avatar.style.backgroundSize = 'cover';
-    avatar.textContent = '';
-  } else {
-    avatar.textContent = (currentUser.first_name?.[0] || currentUser.username?.[0] || 'U').toUpperCase();
+  if (!avatar || !name || !status) {
+    console.error('Profile elements not found');
+    return;
   }
   
-  name.textContent = currentUser.username || `${currentUser.first_name} ${currentUser.last_name}`.trim();
+  // Очищаем предыдущие стили
+  avatar.style.backgroundImage = '';
+  avatar.style.backgroundSize = '';
+  
+  if (currentUser.avatar || currentUser.photo_url) {
+    const photoUrl = currentUser.avatar || currentUser.photo_url;
+    avatar.style.backgroundImage = `url(${photoUrl})`;
+    avatar.style.backgroundSize = 'cover';
+    avatar.style.backgroundPosition = 'center';
+    avatar.textContent = '';
+  } else {
+    // Генерируем инициалы
+    const firstName = currentUser.first_name || '';
+    const lastName = currentUser.last_name || '';
+    const username = currentUser.username || '';
+    
+    let initials = '';
+    if (firstName) {
+      initials += firstName[0].toUpperCase();
+    }
+    if (lastName) {
+      initials += lastName[0].toUpperCase();
+    }
+    if (!initials && username) {
+      initials = username[0].toUpperCase();
+    }
+    if (!initials) {
+      initials = 'U';
+    }
+    
+    avatar.textContent = initials;
+  }
+  
+  // Отображаем имя
+  const displayName = currentUser.username || 
+                     `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim() ||
+                     'Пользователь';
+  name.textContent = displayName;
   status.textContent = 'Онлайн';
+  
+  console.log('Profile updated:', currentUser);
 }
 
 // Подключиться к серверу
@@ -730,6 +794,82 @@ function showSuccess(message) {
     alert(message);
   }
 }
+
+// Глобальные функции для HTML onclick
+window.showCreateServerModal = showCreateServerModal;
+window.hideCreateServerModal = hideCreateServerModal;
+window.showJoinServerModal = showJoinServerModal;
+window.hideJoinServerModal = hideJoinServerModal;
+window.showCreateChannelModal = showCreateChannelModal;
+window.hideCreateChannelModal = hideCreateChannelModal;
+window.createServer = createServer;
+window.joinServer = joinServer;
+window.createChannel = createChannel;
+window.joinChannel = joinChannel;
+window.toggleMute = toggleMute;
+window.leaveVoiceChat = leaveVoiceChat;
+
+// Добавляем обработчики событий после загрузки DOM
+document.addEventListener('DOMContentLoaded', function() {
+  // Обработчики для модальных окон
+  const createServerModal = document.getElementById('createServerModal');
+  const joinServerModal = document.getElementById('joinServerModal');
+  const createChannelModal = document.getElementById('createChannelModal');
+  
+  // Закрытие модальных окон по клику вне их
+  if (createServerModal) {
+    createServerModal.addEventListener('click', function(e) {
+      if (e.target === createServerModal) {
+        hideCreateServerModal();
+      }
+    });
+  }
+  
+  if (joinServerModal) {
+    joinServerModal.addEventListener('click', function(e) {
+      if (e.target === joinServerModal) {
+        hideJoinServerModal();
+      }
+    });
+  }
+  
+  if (createChannelModal) {
+    createChannelModal.addEventListener('click', function(e) {
+      if (e.target === createChannelModal) {
+        hideCreateChannelModal();
+      }
+    });
+  }
+  
+  // Обработчики для Enter в полях ввода
+  const serverNameInput = document.getElementById('serverNameInput');
+  const inviteCodeInput = document.getElementById('inviteCodeInput');
+  const channelNameInput = document.getElementById('channelNameInput');
+  
+  if (serverNameInput) {
+    serverNameInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        createServer();
+      }
+    });
+  }
+  
+  if (inviteCodeInput) {
+    inviteCodeInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        joinServer();
+      }
+    });
+  }
+  
+  if (channelNameInput) {
+    channelNameInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        createChannel();
+      }
+    });
+  }
+});
 
 // Инициализация при загрузке
 document.addEventListener('DOMContentLoaded', init);
